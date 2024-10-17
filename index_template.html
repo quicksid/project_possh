@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Patrolling Optimization</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://api.tiles.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+    <link href="https://api.tiles.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #map {
+            flex: 3;
+        }
+
+        #controls {
+            flex: 1;
+            padding: 10px;
+            background: #f0f0f0;
+            overflow-y: auto;
+        }
+
+        #controls h2 {
+            margin-top: 0;
+        }
+
+        .location-input {
+            margin-bottom: 10px;
+        }
+
+        .route-info {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="controls">
+        <h2>Select Patrolling Sites</h2>
+        <div>
+            <input type="checkbox" id="site1" class="location-input" value="site1">
+            <label for="site1">Natural Sciences Complex</label>
+        </div>
+        <div>
+            <input type="checkbox" id="site2" class="location-input" value="site2">
+            <label for="site2">Capen Hall</label>
+        </div>
+        <div>
+            <input type="checkbox" id="site3" class="location-input" value="site3">
+            <label for="site3">Jacobs Management Center</label>
+        </div>
+        <div>
+            <input type="checkbox" id="site4" class="location-input" value="site4">
+            <label for="site4">Student Union</label>
+        </div>
+        <div>
+            <input type="checkbox" id="site5" class="location-input" value="site5">
+            <label for="site5">Davis Hall</label>
+        </div>
+        <div>
+            <input type="checkbox" id="site6" class="location-input" value="site6">
+            <label for="site6">Alumni Arena</label>
+        </div>
+        <button id="calculate-route">Calculate Best Route</button>
+        <div class="route-info" id="route-info"></div>
+    </div>
+    <script>
+        mapboxgl.accessToken = 'YOUR ACCESS KEY GOES HERE';
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/YOUR MAP STYLE',
+            center: [-78.785843, 43.001509],
+            zoom: 14.8
+        });
+
+        const locations = {
+            'site1': [-78.792840, 43.000198],
+            'site2': [-78.789313, 43.000353],
+            'site3': [-78.786418, 42.999805],
+            'site4': [-78.785822, 43.001652],
+            'site5': [-78.787581, 43.001744],
+            'site6': [-78.782567, 42.999841]
+        };
+
+        document.getElementById('calculate-route').addEventListener('click', () => {
+            const selectedLocations = [];
+            document.querySelectorAll('.location-input:checked').forEach((input) => {
+                selectedLocations.push(locations[input.value]);
+            });
+
+            if (selectedLocations.length < 2) {
+                alert('Please select at least two locations.');
+                return;
+            }
+
+            calculateRoute(selectedLocations);
+        });
+
+        function calculateRoute(coordinates) {
+            const url = `https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordinates.join(';')}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.trips && data.trips[0]) {
+                        const route = data.trips[0].geometry;
+
+                        if (map.getSource('route')) {
+                            map.getSource('route').setData(route);
+                        } else {
+                            map.addLayer({
+                                id: 'route',
+                                type: 'line',
+                                source: {
+                                    type: 'geojson',
+                                    data: route
+                                },
+                                layout: {
+                                    'line-join': 'round',
+                                    'line-cap': 'round'
+                                },
+                                paint: {
+                                    'line-color': '#2bf502',
+                                    'line-width': 5,
+                                    'line-opacity': 0.8
+                                }
+                            });
+
+                            map.addLayer(
+                                {
+                                    id: 'routeline-active',
+                                    type: 'line',
+                                    source: {
+                                        type: 'geojson',
+                                        data: route
+                                    },
+                                    layout: {
+                                        'line-join': 'round',
+                                        'line-cap': 'round'
+                                    },
+                                    paint: {
+                                        'line-color': '#3887be',
+                                        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3, 22, 12]
+                                    }
+                                },
+                                'waterway-label'
+                            );
+
+                            map.addLayer(
+                                {
+                                    id: 'routearrows',
+                                    type: 'symbol',
+                                    source: {
+                                        type: 'geojson',
+                                        data: route
+                                    },
+                                    layout: {
+                                        'symbol-placement': 'line',
+                                        'text-field': '▶',
+                                        'text-size': [
+                                            'interpolate',
+                                            ['linear'],
+                                            ['zoom'],
+                                            12,
+                                            24,
+                                            22,
+                                            60
+                                        ],
+                                        'symbol-spacing': [
+                                            'interpolate',
+                                            ['linear'],
+                                            ['zoom'],
+                                            12,
+                                            30,
+                                            22,
+                                            160
+                                        ],
+                                        'text-keep-upright': false
+                                    },
+                                    paint: {
+                                        'text-color': '#3887be',
+                                        'text-halo-color': 'hsl(55, 11%, 96%)',
+                                        'text-halo-width': 3
+                                    }
+                                },
+                                'waterway-label'
+                            );
+                        }
+
+                        const distance = (data.trips[0].distance / 1000).toFixed(2);
+                        const duration = (data.trips[0].duration / 60).toFixed(2);
+                        document.getElementById('route-info').innerHTML = `<p>Distance: ${distance} km</p><p>Duration: ${duration} mins</p>`;
+                    }
+                });
+        }
+    </script>
+</body>
+
+</html>
